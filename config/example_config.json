@@ -1,0 +1,15 @@
+{
+  "method": 0,
+  "browser_type": "edge",
+  "headless": false,
+  "username": "",
+  "live_url": "https://liveplatform.taobao.com/live/12345678",
+  "comments": "主播讲得真好！\n这个商品不错！\n价格很实惠！\n支持主播！\n666\n已下单！\n质量怎么样？\n有优惠吗？\n什么时候发货？\n颜色好看！\n主播辛苦了！\n产品很棒！\n性价比高！\n推荐购买！\n太实用了！\n喜欢这个款式！\n包装精美！\n发货速度快！\n物超所值！\n下次还会来！",
+  "interval_min": 5,
+  "interval_max": 12,
+  "max_count": 100,
+  "auto_reply": true,
+  "gift_thanks": true,
+  "welcome": false,
+  "save_cookie": true
+}
