@@ -136,19 +136,18 @@ class TaobaoLiveBotUI(QMainWindow):
         left_panel.setLayout(left_layout)
         
         # 方法选择
-        method_group = QGroupBox('🔧 选择运行方法')
+        method_group = QGroupBox('🔧 运行方法')
         method_layout = QVBoxLayout()
         
         self.method_combo = QComboBox()
         self.method_combo.addItems([
-            'Playwright - 推荐（可视化，稳定）',
-            'WebSocket - 高级（速度快，隐蔽）',
-            'Selenium - 传统（兼容性好）'
+            'Playwright - 推荐（稳定可视化）',
+            'WebSocket - 高级（速度快）'
         ])
         self.method_combo.currentIndexChanged.connect(self.on_method_changed)
         method_layout.addWidget(self.method_combo)
         
-        self.method_desc = QLabel('✨ 可视化操作，支持智能回复，推荐新手使用')
+        self.method_desc = QLabel('✨ 可视化浏览器操作，支持智能回复，推荐使用')
         self.method_desc.setWordWrap(True)
         self.method_desc.setStyleSheet('color: #666; font-size: 12px; padding: 5px;')
         method_layout.addWidget(self.method_desc)
@@ -428,17 +427,18 @@ class TaobaoLiveBotUI(QMainWindow):
     def on_method_changed(self, index):
         """方法选择改变"""
         descriptions = {
-            0: '✨ Playwright: 可视化操作，支持智能回复，推荐新手使用。响应速度快，稳定性好。',
-            1: '🚀 WebSocket: 速度最快，隐蔽性强，适合高级用户。支持毫秒级响应。',
-            2: '🔧 Selenium: 传统方案，兼容性好，资料丰富。速度较慢但稳定。'
+            0: '✨ Playwright: 可视化浏览器操作，支持智能回复和礼物感谢。稳定性好，推荐使用。',
+            1: '🚀 WebSocket: 速度快，隐蔽性强，适合高级用户。支持实时消息监控和快速响应。'
         }
         self.method_desc.setText(descriptions.get(index, ''))
         
-        # Playwright方法才显示浏览器选择
+        # 只有Playwright方法才显示浏览器选择
         is_playwright = (index == 0)
         self.browser_combo.setVisible(is_playwright)
         self.browser_desc.setVisible(is_playwright)
-        # 找到浏览器类型标签
+        self.headless_checkbox.setVisible(is_playwright)
+        
+        # 找到浏览器类型标签并设置可见性
         for i in range(self.browser_combo.parent().layout().count()):
             item = self.browser_combo.parent().layout().itemAt(i)
             if item and item.widget() and isinstance(item.widget(), QLabel):
@@ -467,7 +467,7 @@ class TaobaoLiveBotUI(QMainWindow):
         
         # 准备配置
         config = {
-            'method': ['playwright', 'websocket', 'selenium'][self.method_combo.currentIndex()],
+            'method': ['playwright', 'websocket'][self.method_combo.currentIndex()],
             'browser_type': browser_type,
             'headless': self.headless_checkbox.isChecked(),
             'username': self.username_input.text().strip(),

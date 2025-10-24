@@ -93,37 +93,59 @@ class TaobaoLivePlaywrightBot:
             self.current_username = username
             
             # 先检查是否已经登录（通过Cookie）
-            await self.page.goto('https://www.taobao.com/')
-            await self.page.wait_for_load_state('networkidle')
+            print("🔍 检查登录状态...")
+            await self.page.goto('https://www.taobao.com/', timeout=30000)
+            await self.page.wait_for_load_state('networkidle', timeout=15000)
             
             # 检查登录状态
             if await self.check_login_status():
                 print("✅ 使用Cookie自动登录成功！")
                 return True
             
+            print("📝 Cookie登录失败，开始账号密码登录...")
             print("正在访问淘宝登录页面...")
-            await self.page.goto('https://login.taobao.com/member/login.jhtml')
-            await self.page.wait_for_load_state('networkidle')
+            await self.page.goto('https://login.taobao.com/member/login.jhtml', timeout=30000)
+            await self.page.wait_for_load_state('networkidle', timeout=15000)
+            
+            # 等待登录表单加载
+            await self.page.wait_for_selector('#fm-login-id', timeout=10000)
             
             # 输入用户名
             await self.page.fill('#fm-login-id', username)
-            await self.random_delay(1, 2)
+            await self.random_delay(0.5, 1)
             
             # 输入密码
             await self.page.fill('#fm-login-password', password)
-            await self.random_delay(1, 2)
+            await self.random_delay(0.5, 1)
             
             # 点击登录按钮
             await self.page.click('#login-form button[type="submit"]')
-            await self.page.wait_for_load_state('networkidle')
+            print("⏳ 等待登录响应...")
+            await self.random_delay(2, 3)
             
-            # 检查是否需要验证码
-            if await self.page.locator('.nc_wrapper').count() > 0:
-                print("检测到滑动验证码，请手动完成验证...")
-                await self.page.wait_for_url('https://www.taobao.com/', timeout=60000)
+            # 检查是否需要验证码（滑块/拼图等）
+            max_wait = 60  # 最多等待60秒
+            waited = 0
+            while waited < max_wait:
+                # 检查是否有验证码
+                has_slider = await self.page.locator('.nc_wrapper').count() > 0
+                has_captcha = await self.page.locator('#nocaptcha').count() > 0
+                
+                if has_slider or has_captcha:
+                    if waited == 0:
+                        print("🔐 检测到验证码，请在浏览器中手动完成验证...")
+                    await asyncio.sleep(1)
+                    waited += 1
+                else:
+                    # 没有验证码了，检查登录状态
+                    break
+            
+            # 等待页面跳转或登录完成
+            await self.page.wait_for_load_state('networkidle', timeout=10000)
             
             # 检查登录状态
-            if 'login' not in self.page.url or await self.check_login_status():
+            is_logged_in = await self.check_login_status()
+            if is_logged_in or 'login' not in self.page.url.lower():
                 print("✅ 登录成功！")
                 
                 # 保存Cookie
@@ -134,11 +156,16 @@ class TaobaoLivePlaywrightBot:
                 
                 return True
             else:
-                print("❌ 登录失败，请检查账号密码")
+                print("❌ 登录失败，请检查账号密码或重试")
                 return False
                 
+        except asyncio.TimeoutError:
+            print("❌ 登录超时，请检查网络连接")
+            return False
         except Exception as e:
             print(f"❌ 登录过程中出现错误: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     async def check_login_status(self):
@@ -149,93 +176,187 @@ class TaobaoLivePlaywrightBot:
             login_indicators = [
                 '.site-nav-user',  # 用户信息区域
                 '.site-nav-sign',  # 登录后的标识
-                'a[href*="member.taobao.com"]'  # 会员中心链接
+                'a[href*="member.taobao.com"]',  # 会员中心链接
+                '.J_MyTaobao',  # 我的淘宝
+                '.site-nav-bd .site-nav-user',  # 用户区域
             ]
             
             for indicator in login_indicators:
-                if await self.page.locator(indicator).count() > 0:
+                try:
+                    count = await self.page.locator(indicator).count()
+                    if count > 0:
+                        # 进一步检查元素是否可见
+                        element = self.page.locator(indicator).first
+                        if await element.is_visible():
+                            return True
+                except:
+                    continue
+            
+            # 额外检查：如果当前URL不包含login，大概率已登录
+            current_url = self.page.url
+            if current_url and 'login' not in current_url.lower() and 'taobao.com' in current_url:
+                # 检查页面是否有"请登录"字样
+                login_text = await self.page.locator('text=请登录').count()
+                if login_text == 0:
                     return True
             
             return False
-        except:
+        except Exception as e:
+            print(f"⚠️ 检查登录状态出错: {e}")
             return False
     
     async def enter_live_room(self, live_url):
         """进入直播间"""
         try:
-            print(f"正在进入直播间: {live_url}")
+            print(f"🎬 正在进入直播间: {live_url}")
             self.live_url = live_url
             
-            await self.page.goto(live_url)
-            await self.page.wait_for_load_state('networkidle')
+            # 访问直播间
+            await self.page.goto(live_url, timeout=30000)
+            print("⏳ 等待直播间页面加载...")
+            await self.page.wait_for_load_state('networkidle', timeout=20000)
             
-            # 等待直播间加载完成
-            await self.page.wait_for_selector('.comment-input, input[placeholder*="说点什么"], textarea[placeholder*="说点什么"]', timeout=15000)
+            # 等待直播间关键元素加载完成（评论输入框、直播画面等）
+            input_selectors = [
+                '.comment-input',
+                'input[placeholder*="说点什么"]',
+                'textarea[placeholder*="说点什么"]',
+                'input[placeholder*="发个评论"]',
+                '.live-comment-input',
+                '.live-input',
+                '.chat-input'
+            ]
+            
+            # 尝试找到任意一个输入框
+            found = False
+            for selector in input_selectors:
+                try:
+                    await self.page.wait_for_selector(selector, timeout=5000)
+                    found = True
+                    print(f"✅ 找到评论输入框: {selector}")
+                    break
+                except:
+                    continue
+            
+            if not found:
+                print("⚠️ 未找到评论输入框，但将继续尝试运行...")
+                # 不直接返回False，给后续操作机会
+            
+            # 等待一下确保页面完全加载
+            await asyncio.sleep(2)
             
             print("✅ 成功进入直播间！")
             return True
             
+        except asyncio.TimeoutError:
+            print(f"❌ 进入直播间超时: {live_url}")
+            return False
         except Exception as e:
-            print(f"进入直播间失败: {e}")
+            print(f"❌ 进入直播间失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     async def send_comment(self, content):
         """发送评论"""
-        try:
-            # 查找评论输入框（多种可能的选择器）
-            input_selectors = [
-                '.comment-input input',
-                'input[placeholder*="说点什么"]',
-                'textarea[placeholder*="说点什么"]',
-                '.live-comment-input input',
-                '.comment-box input',
-                '#comment-input'
-            ]
-            
-            input_element = None
-            for selector in input_selectors:
-                if await self.page.locator(selector).count() > 0:
-                    input_element = self.page.locator(selector).first
-                    break
-            
-            if not input_element:
-                print("❌ 未找到评论输入框")
-                return False
-            
-            # 清空输入框并输入评论
-            await input_element.fill('')
-            await self.random_delay(0.2, 0.5)
-            await input_element.fill(content)
-            await self.random_delay(0.5, 1)
-            
-            # 查找发送按钮
-            send_selectors = [
-                '.comment-send',
-                'button:has-text("发送")',
-                'button:has-text("发表")',
-                '.send-btn',
-                '.comment-submit'
-            ]
-            
-            send_button = None
-            for selector in send_selectors:
-                if await self.page.locator(selector).count() > 0:
-                    send_button = self.page.locator(selector).first
-                    break
-            
-            # 如果找到发送按钮就点击，否则按回车
-            if send_button:
-                await send_button.click()
-            else:
-                await input_element.press('Enter')
-            
-            await self.random_delay(0.5, 1)
-            print(f"✅ 发送评论: {content}")
-            return True
-            
-        except Exception as e:
-            print(f"❌ 发送评论失败: {e}")
-            return False
+        retry_count = 0
+        max_retries = 3
+        
+        while retry_count < max_retries:
+            try:
+                # 查找评论输入框（多种可能的选择器）
+                input_selectors = [
+                    '.comment-input input',
+                    'input[placeholder*="说点什么"]',
+                    'textarea[placeholder*="说点什么"]',
+                    '.live-comment-input input',
+                    '.comment-box input',
+                    '#comment-input',
+                    'input[placeholder*="发个评论"]',
+                    'textarea[placeholder*="发个评论"]',
+                    '.live-input input',
+                    '.chat-input input',
+                    'input[type="text"]'
+                ]
+                
+                input_element = None
+                for selector in input_selectors:
+                    try:
+                        count = await self.page.locator(selector).count()
+                        if count > 0:
+                            elem = self.page.locator(selector).first
+                            # 检查元素是否可见和可用
+                            if await elem.is_visible() and await elem.is_enabled():
+                                input_element = elem
+                                break
+                    except:
+                        continue
+                
+                if not input_element:
+                    print("❌ 未找到可用的评论输入框")
+                    if retry_count < max_retries - 1:
+                        print(f"⏳ {retry_count + 1}秒后重试...")
+                        await asyncio.sleep(1)
+                        retry_count += 1
+                        continue
+                    return False
+                
+                # 聚焦输入框
+                await input_element.focus()
+                await self.random_delay(0.1, 0.3)
+                
+                # 清空输入框并输入评论
+                await input_element.fill('')
+                await self.random_delay(0.1, 0.2)
+                
+                # 模拟人工逐字输入（可选，更真实但慢）
+                # await input_element.type(content, delay=random.randint(50, 150))
+                await input_element.fill(content)
+                await self.random_delay(0.3, 0.6)
+                
+                # 查找发送按钮
+                send_selectors = [
+                    'button:has-text("发送")',
+                    'button:has-text("发表")',
+                    '.comment-send',
+                    '.send-btn',
+                    '.comment-submit',
+                    'button[type="submit"]',
+                    '.submit-btn'
+                ]
+                
+                send_button = None
+                for selector in send_selectors:
+                    try:
+                        count = await self.page.locator(selector).count()
+                        if count > 0:
+                            btn = self.page.locator(selector).first
+                            if await btn.is_visible() and await btn.is_enabled():
+                                send_button = btn
+                                break
+                    except:
+                        continue
+                
+                # 如果找到发送按钮就点击，否则按回车
+                if send_button:
+                    await send_button.click()
+                else:
+                    await input_element.press('Enter')
+                
+                await self.random_delay(0.3, 0.5)
+                print(f"✅ 发送评论: {content}")
+                return True
+                
+            except Exception as e:
+                print(f"⚠️ 发送评论出错（尝试 {retry_count + 1}/{max_retries}）: {e}")
+                if retry_count < max_retries - 1:
+                    await asyncio.sleep(1)
+                    retry_count += 1
+                else:
+                    print(f"❌ 发送评论最终失败: {content}")
+                    return False
+        
+        return False
     
     async def monitor_live_room(self):
         """监控直播间消息"""

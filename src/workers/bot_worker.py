@@ -43,15 +43,25 @@ class BotWorkerThread(QThread):
                 self.run_playwright_bot()
             elif method == 'websocket':
                 self.run_websocket_bot()
-            elif method == 'selenium':
-                self.run_selenium_bot()
+            else:
+                self.log_signal.emit(f'❌ 不支持的运行方法: {method}', 'error')
+                self.status_signal.emit('错误')
             
+        except KeyboardInterrupt:
+            self.log_signal.emit('⏹️ 用户中断运行', 'warning')
+            self.status_signal.emit('已停止')
         except Exception as e:
             self.log_signal.emit(f'❌ 运行出错: {str(e)}', 'error')
+            self.stats['errors'] += 1
+            self.stats_signal.emit(self.stats)
             self.status_signal.emit('错误')
+            # 打印详细错误信息用于调试
+            import traceback
+            traceback.print_exc()
         finally:
             self.status_signal.emit('已停止')
-            self.log_signal.emit('⏹️ 机器人已停止', 'info')
+            elapsed = time.time() - self.stats['start_time'] if self.stats['start_time'] else 0
+            self.log_signal.emit(f'⏹️ 机器人已停止（运行时长: {int(elapsed)}秒）', 'info')
     
     def run_playwright_bot(self):
         """运行Playwright方法"""
@@ -166,9 +176,6 @@ class BotWorkerThread(QThread):
         except Exception as e:
             self.log_signal.emit(f'❌ WebSocket运行错误: {str(e)}', 'error')
     
-    def run_selenium_bot(self):
-        """运行Selenium方法"""
-        self.log_signal.emit('ℹ️ Selenium方法需要适配直播间，暂未实现', 'warning')
     
     def stop(self):
         """停止机器人"""
