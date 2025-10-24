@@ -169,12 +169,6 @@ class TaobaoLiveBotUI(QMainWindow):
                 browser_options.append(f"🌐 {info['name']}")
         
         self.browser_combo.addItems(browser_options)
-        self.browser_combo.currentIndexChanged.connect(self.on_browser_changed)
-        
-        # 默认选择Edge（如果可用）
-        if 'edge' in available_browsers:
-            edge_index = available_browsers.index('edge')
-            self.browser_combo.setCurrentIndex(edge_index)
         
         browser_layout.addWidget(self.browser_combo)
         method_layout.addLayout(browser_layout)
@@ -184,6 +178,14 @@ class TaobaoLiveBotUI(QMainWindow):
         self.browser_desc.setWordWrap(True)
         self.browser_desc.setStyleSheet('color: #666; font-size: 11px; padding: 2px;')
         method_layout.addWidget(self.browser_desc)
+        
+        # 连接信号（在创建browser_desc之后）
+        self.browser_combo.currentIndexChanged.connect(self.on_browser_changed)
+        
+        # 默认选择Edge（如果可用）
+        if 'edge' in available_browsers:
+            edge_index = available_browsers.index('edge')
+            self.browser_combo.setCurrentIndex(edge_index)
         
         self.headless_checkbox = QCheckBox('无头模式（后台运行，不显示浏览器）')
         method_layout.addWidget(self.headless_checkbox)
@@ -541,6 +543,10 @@ class TaobaoLiveBotUI(QMainWindow):
     
     def add_log(self, message, level='info'):
         """添加日志"""
+        # 检查log_text是否已经创建，如果没有则直接返回
+        if not hasattr(self, 'log_text') or self.log_text is None:
+            return
+            
         timestamp = datetime.now().strftime('%H:%M:%S')
         
         colors = {
